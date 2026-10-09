@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Byahe | Baguio Transit Navigator</title>
+<script>try{var m=localStorage.getItem('byahe-theme')||'system';document.documentElement.dataset.theme=(m==='dark'||(m==='system'&&matchMedia('(prefers-color-scheme: dark)').matches))?'dark':'light'}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --road:#0F3D4C; --signal:#FFC20E; --paper:#F7F9F8; --ink:#13222B;
+  --coral:#E4572E; --mist:#DCE5E3; --muted:#5B6B72;
+  --card:#fff; --on-road:#fff; color-scheme:light;
+  font-family:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;color:var(--ink);background:var(--paper)}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--signal);outline-offset:2px}
+
+.app{position:relative;height:100dvh;overflow:hidden}
+#map{position:absolute;inset:0;z-index:0}
+
+/* Phone: bottom sheet over the map */
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:1000;
+  max-height:58dvh;overflow:auto;background:var(--paper);
+  border-radius:20px 20px 0 0;box-shadow:0 -6px 24px rgba(15,61,76,.22);
+  padding:10px 16px calc(16px + env(safe-area-inset-bottom));
+}
+.grab{width:42px;height:4px;border-radius:2px;background:var(--mist);margin:0 auto 10px}
+h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.7rem;margin:0 0 10px;color:var(--road);letter-spacing:-.02em}
+
+/* Tablet and up: side panel */
+@media (min-width:768px){
+  .app{display:grid;grid-template-columns:clamp(340px,38vw,420px) 1fr}
+  .sheet{position:relative;grid-column:1;grid-row:1;max-height:none;border-radius:0;box-shadow:4px 0 18px rgba(15,61,76,.15);padding:20px 20px 24px;z-index:2}
+  .grab{display:none}
+  #map{position:relative;grid-column:2;grid-row:1}
+  h1{font-size:2.1rem}
+}
+
+/* Search fields: dots mark pickup (circle) and drop-off (square) */
+.field{display:flex;align-items:center;gap:8px;background:var(--card);border:1.5px solid var(--mist);border-radius:12px;padding:4px 4px 4px 12px;margin:0}
+.field + ul + .field{margin-top:8px}
+.field:focus-within{border-color:var(--road)}
+.dot{flex:none;width:12px;height:12px;background:var(--road);border-radius:50%}
+.dot.b{background:var(--coral);border-radius:3px}
+.field input{flex:1;min-width:0;border:0;background:none;padding:10px 4px;font-size:1rem}
+.field input:focus-visible{outline:none}
+.field button{flex:none;border:0;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:600}
+.find{background:var(--road);color:var(--on-road)}
+.loc{background:var(--mist);color:var(--road)}
+.hits{list-style:none;margin:4px 0 0;padding:0}
+.hits button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--mist);padding:9px 6px;cursor:pointer;font-size:.92rem}
+.hits button:hover{background:var(--card)}
+
+#status{min-height:1.4em;margin:12px 2px 6px;font-size:.95rem;color:var(--muted)}
+
+/* Ride options */
+.opt{display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;align-items:center;width:100%;text-align:left;background:var(--card);border:1.5px solid var(--mist);border-left:6px solid var(--c,var(--road));border-radius:12px;padding:10px 12px;margin:0 0 8px;cursor:pointer}
+.opt[aria-pressed="true"]{border-color:var(--road);border-left-color:var(--c);box-shadow:0 0 0 2px var(--road) inset}
+.opt .ico{grid-row:1/3;font-size:1.6rem}
+.opt .name{font-weight:600}
+.opt .sub{font-size:.85rem;color:var(--muted)}
+.opt .fare{grid-row:1/3;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.2rem}
+#confirm{width:100%;margin-top:4px;border:0;border-radius:12px;padding:14px;background:var(--signal);color:#13222B;font-weight:700;font-size:1rem;cursor:pointer}
+
+/* Traffic pill and quick places */
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.top h1{margin:0}
+.traffic{display:flex;align-items:center;gap:6px;margin:0;font-size:.82rem;color:var(--muted);text-align:right}
+.tdot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--mist)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0 2px}
+.chips button{flex:none;border:1.5px solid var(--mist);background:var(--card);border-radius:999px;padding:6px 12px;font-size:.88rem;cursor:pointer}
+.chips button:hover{border-color:var(--road)}
+
+/* Jeepney routes */
+.jeeps{margin-top:14px;border-top:1px solid var(--mist);padding-top:10px}
+.jeeps summary{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.05rem;cursor:pointer}
+.hint{margin:6px 0 0;font-size:.85rem;color:var(--muted)}
+#routes{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.rt{display:flex;align-items:center;gap:7px;border:1.5px solid var(--mist);background:var(--card);border-radius:999px;padding:6px 12px;font-size:.88rem;cursor:pointer}
+.rt i{flex:none;width:12px;height:12px;border-radius:50%;background:var(--c)}
+.rt[aria-pressed="true"]{border-color:var(--c);box-shadow:0 0 0 2px var(--c) inset}
+.stops{margin:10px 0 0;padding-left:24px;font-size:.92rem;line-height:1.7}
+.stops li::marker{color:var(--c);font-weight:700}
+
+/* Tabs, panels, settings */
+.tabs{display:flex;gap:4px;overflow-x:auto;margin:0 0 12px;border-bottom:1.5px solid var(--mist)}
+.tab{flex:none;border:0;background:none;padding:9px 12px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1.5px}
+.tab[aria-selected="true"]{color:var(--road);border-bottom-color:var(--signal)}
+.panel[hidden]{display:none}
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.btn{border:0;border-radius:10px;padding:11px 16px;background:var(--road);color:var(--on-road);font-weight:600;cursor:pointer;margin-top:12px}
+.info{margin:10px 0 0;font-size:.92rem}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-bottom:1px solid var(--mist)}
+.row select{border:1.5px solid var(--mist);border-radius:8px;background:var(--card);padding:6px 8px}
+.row input[type=checkbox]{width:20px;height:20px;accent-color:var(--road)}
+.terms{list-style:none;padding:0;margin:10px 0 0}
+.terms button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--mist);padding:9px 4px;cursor:pointer}
+.veh{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;border:2px solid #fff;font-size:11px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.term{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--road);border:2px solid var(--signal);font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+
+/* Theme: dark palette, segmented switch, map styling */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#0F1A20; --ink:#E8F0F2; --mist:#2A3A42; --muted:#9FB1B8;
+  --card:#17252C; --road:#5CB8D6; --on-road:#0B1A21; --coral:#FF7A59;
+}
+.row select{color:var(--ink)}
+.seg{display:flex;border:1.5px solid var(--mist);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:var(--card);color:var(--muted);padding:7px 12px;font-weight:600;cursor:pointer}
+.seg button[aria-checked="true"]{background:var(--road);color:var(--on-road)}
+[data-theme="dark"] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)}
+[data-theme="dark"] .leaflet-container{background:#0F1A20}
+[data-theme="dark"] .leaflet-control-attribution{background:rgba(15,26,32,.8);color:var(--muted)}
+[data-theme="dark"] .leaflet-control-attribution a{color:var(--road)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--card);color:var(--ink)}
+.leaflet-bar a,.leaflet-bar a:hover{background:var(--card);color:var(--ink);border-bottom-color:var(--mist)}
+
+/* Map pins */
+.pin{width:18px;height:18px;border:3px solid #fff;background:var(--road);border-radius:50%;box-shadow:0 1px 5px rgba(0,0,0,.45)}
+.pin.b{background:var(--coral);border-radius:4px}
+</style>
+</head>
+<body>
+<main class="app">
+  <div id="map" role="application" aria-label="Map of Baguio City"></div>
+
+  <section class="sheet" aria-label="Plan your trip">
+    <div class="grab" aria-hidden="true"></div>
+    <div class="top"><h1>Biyahe</h1><p class="traffic"><span class="tdot" id="tdot"></span><span id="ttext">Loading traffic…</span></p></div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-t="trip" aria-selected="true">Trip</button>
+      <button class="tab" role="tab" data-t="jeep" aria-selected="false">Jeepney</button>
+      <button class="tab" role="tab" data-t="bus" aria-selected="false">Bus</button>
+      <button class="tab" role="tab" data-t="taxi" aria-selected="false">Taxi</button>
+      <button class="tab" role="tab" data-t="set" aria-selected="false">Settings</button>
+    </div>
+
+    <div class="panel" id="p-trip">
+    <form class="field" id="f-pickup">
+      <span class="dot" aria-hidden="true"></span>
+      <input id="q-pickup" placeholder="Pickup" aria-label="Pickup location" autocomplete="off">
+      <button type="button" class="loc" id="loc" aria-label="Use my current location">Me</button>
+      <button class="find">Find</button>
+    </form>
+    <ul class="hits" id="hits-pickup"></ul>
+
+    <form class="field" id="f-drop">
+      <span class="dot b" aria-hidden="true"></span>
+      <input id="q-drop" placeholder="Where to?" aria-label="Drop-off location" autocomplete="off">
+      <button class="find">Find</button>
+    </form>
+    <ul class="hits" id="hits-drop"></ul>
+
+    <div class="chips" id="chips" role="group" aria-label="Popular places in Baguio"></div>
+
+    <p id="status" role="status">Search for a place, or tap the map to drop a pin.</p>
+    <div id="options"></div>
+    <button id="confirm" hidden></button>
+
+    </div>
+
+    <div class="panel" id="p-jeep" hidden>
+      <p class="hint">Sample Baguio routes. Tap a route to see its stops and when the next jeepney arrives.</p>
+      <div class="pills" id="routes"></div>
+      <ol class="stops" id="stops" hidden></ol>
+    </div>
+
+    <div class="panel" id="p-bus" hidden>
+      <p class="hint">Sample provincial routes from Baguio. Tap a route to see its distance and fare.</p>
+      <div class="pills" id="busroutes"></div>
+      <p class="info" id="bus-info"></p>
+      <ul class="terms" id="terms"></ul>
+    </div>
+
+    <div class="panel" id="p-taxi" hidden>
+      <p class="info" id="taxi-info"></p>
+      <button type="button" class="btn" id="taxi-me">Use my location</button>
+    </div>
+
+    <div class="panel" id="p-set" hidden>
+      <div class="row"><span id="theme-label">Appearance</span>
+        <div class="seg" role="radiogroup" aria-labelledby="theme-label">
+          <button type="button" role="radio" data-m="light" aria-checked="false">Light</button>
+          <button type="button" role="radio" data-m="dark" aria-checked="false">Dark</button>
+          <button type="button" role="radio" data-m="system" aria-checked="true">System</button>
+        </div>
+      </div>
+      <label class="row"><span>Show moving jeepneys</span><input type="checkbox" id="s-jeeps" checked></label>
+      <label class="row"><span>Show nearby taxis</span><input type="checkbox" id="s-taxis" checked></label>
+      <label class="row"><span>Show bus routes and terminals</span><input type="checkbox" id="s-terms" checked></label>
+      <label class="row"><span>Traffic</span><select id="s-traffic"><option value="auto">Automatic (simulated)</option><option value="light">Light</option><option value="moderate">Moderate</option><option value="heavy">Heavy</option></select></label>
+      <label class="row"><span>Walking pace</span><select id="s-walk"><option value="15">Normal (hilly)</option><option value="12">Fast</option><option value="20">Slow</option></select></label>
+      <label class="row"><span>Vehicle speed on the map</span><select id="s-sim"><option value="1">Real time</option><option value="4" selected>4x, easier to watch</option><option value="10">10x</option></select></label>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* SAMPLE RATES: edit these to match real fares.
+   fare = base + (km beyond freeKm) * perKm + minutes * perMin
+   slow = travel-time multiplier vs. a car, wait = minutes waiting for the ride */
+const FARES = {
+  taxi:  {label:'Taxi',            ico:'🚕', color:'#FFC20E', base:45, perKm:13.5, perMin:2,   slow:1,   wait:3},
+  car:   {label:'Car',             ico:'🚗', color:'#0F3D4C', base:60, perKm:16,   perMin:3,   slow:1,   wait:4},
+  moto:  {label:'Motorcycle taxi', ico:'🏍️', color:'#E4572E', base:50, perKm:10,   perMin:1.5, slow:.8,  wait:3},
+  trike: {label:'Tricycle',        ico:'🛺', color:'#7A9E3A', base:20, perKm:8,    perMin:0,   slow:1.4, wait:2, maxKm:6, note:'Short trips only'},
+  jeep:  {label:'Jeepney',         ico:'🚌', color:'#3A7CA5', base:13, freeKm:4, perKm:2, perMin:0, slow:1.5, wait:8,  note:'Estimate from road distance'},
+  bus:   {label:'Bus',             ico:'🚍', color:'#8E5BA8', base:15, freeKm:5, perKm:2.2, perMin:0, slow:1.4, wait:10, note:'Estimate from road distance'}
+};
+
+const $ = s => document.querySelector(s);
+const map = L.map('map',{zoomControl:true,minZoom:8,maxBounds:[[14.3,119.8],[18.7,121.7]],maxBoundsViscosity:1}).setView([16.4023,120.5960],14);   // Baguio City
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+
+const pts = {pickup:null, drop:null}, markers = {};
+let routeLayer = null, route = null, selected = null;
+const say = t => { $('#status').textContent = t; };
+
+function pinIcon(k){ return L.divIcon({className:'',html:'<div class="pin'+(k==='drop'?' b':'')+'"></div>',iconSize:[18,18],iconAnchor:[9,9]}); }
+
+function setPoint(k, latlng, label){
+  pts[k] = latlng;
+  $('#q-'+k).value = label;
+  $('#hits-'+k).innerHTML = '';
+  if(markers[k]) markers[k].setLatLng(latlng);
+  else markers[k] = L.marker(latlng,{icon:pinIcon(k),keyboard:false}).addTo(map);
+  clearRoute();
+  if(pts.pickup && pts.drop) getRoute();
+  else { map.flyTo(latlng,14); say(k==='pickup' ? 'Pickup set. Now choose where you are going.' : 'Drop-off set. Now choose your pickup.'); }
+}
+
+function clearRoute(){
+  if(routeLayer){ map.removeLayer(routeLayer); routeLayer = null; }
+  route = null; selected = null; walk = null; hotBoost = 0;
+  $('#options').innerHTML = ''; $('#confirm').hidden = true;
+}
+
+/* Search places in the Philippines (Nominatim: free, keep to one search per tap) */
+async function search(k){
+  const q = $('#q-'+k).value.trim();
+  if(!q) return say('Type a place name first.');
+  say('Searching…');
+  try{
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&viewbox=119.9,18.6,121.6,14.4&bounded=1&accept-language=en&q='+encodeURIComponent(q));
+    const list = await r.json();
+    const ul = $('#hits-'+k); ul.innerHTML = '';
+    if(!list.length) return say('No places found. Try a nearby landmark or city name.');
+    list.forEach(p=>{
+      const li = document.createElement('li'), b = document.createElement('button');
+      b.type = 'button'; b.textContent = p.display_name;
+      b.onclick = () => setPoint(k,{lat:+p.lat,lng:+p.lon}, p.display_name.split(',').slice(0,2).join(','));
+      li.append(b); ul.append(li);
+    });
+    say('Choose the right place from the list.');
+  }catch(e){ say('Search failed. Check your internet connection and try again.'); }
+}
+['pickup','drop'].forEach(k => $('#f-'+k).addEventListener('submit', e => { e.preventDefault(); search(k); }));
+
+/* Use my location (needs https or localhost, e.g. VS Code Live Server) */
+$('#loc').onclick = () => {
+  if(!navigator.geolocation) return say('This device cannot share its location.');
+  say('Finding your location…');
+  navigator.geolocation.getCurrentPosition(
+    p => setPoint('pickup',{lat:p.coords.latitude,lng:p.coords.longitude},'My location'),
+    () => say('Location is blocked. Allow location access, or search for your pickup.'),
+    {enableHighAccuracy:true,timeout:10000});
+};
+
+/* Tap the map: first tap sets pickup, later taps set drop-off */
+map.on('click', e => setPoint(pts.pickup ? 'drop' : 'pickup', e.latlng, 'Pinned location'));
+
+const settings={jeeps:true,taxis:true,terms:true,traffic:'auto',walk:15,sim:4};
+/* ---- Simulated live traffic for Baguio (no real traffic feed, this is a simulation) ---- */
+const LEVELS=[{max:.35,n:'Light',c:'#2E9E5B'},{max:.65,n:'Moderate',c:'#E0A100'},{max:1.01,n:'Heavy',c:'#D43F2F'}];
+const TF={taxi:1,car:1,moto:.6,trike:.8,jeep:1.1,bus:1.2};   // how much traffic slows each ride
+const WALK={label:'Walk',ico:'🚶',color:'#5B6B72',slow:1,wait:0,note:'Free, allow extra time on hills',maxKm:15};
+const WALK_MIN_PER_KM=15;   // about 4 km/h, Baguio is hilly
+// Approximate busy spots (Session Rd, Harrison Rd, Public Market, Upper Session): routes passing them get slower
+const HOT=[[16.4122,120.5962],[16.4105,120.5945],[16.4158,120.5937],[16.4135,120.5985]];
+// Approximate pins for quick picks
+const SPOTS=[['Burnham Park',16.4113,120.5935],['Session Road',16.4122,120.5962],['Public Market',16.4158,120.5937],['SM City Baguio',16.4088,120.5978],['Camp John Hay',16.3996,120.6128],['Mines View Park',16.4195,120.6275]];
+let walk=null, hotBoost=0, drift=0, traffic=0;
+
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const clock=d=>d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+const fmtDist=km=>km<1?Math.round(km*1000)+' m':km.toFixed(1)+' km';
+const level=()=>LEVELS.find(l=>traffic<l.max);
+
+function baseTraffic(d=new Date()){   // rush hours, lunch bump, busier weekends
+  const h=d.getHours()+d.getMinutes()/60, bump=(c,w,a)=>a*Math.exp(-((h-c)**2)/(2*w*w));
+  return .12+bump(8,1,.55)+bump(12.5,1.2,.25)+bump(17.5,1.3,.6)+([0,6].includes(d.getDay())?.1:0);
+}
+function updateTraffic(){
+  drift=clamp(drift+(Math.random()-.5)*.14,-.2,.2);
+  traffic=clamp(baseTraffic()+drift+hotBoost,.05,1);
+  if(settings.traffic!=='auto') traffic={light:.2,moderate:.5,heavy:.85}[settings.traffic];
+  const l=level();
+  $('#tdot').style.background=l.c;
+  $('#ttext').textContent=`${l.n} traffic (simulated), ${clock(new Date())}`;
+}
+function hotspots(coords){
+  return HOT.filter(h=>coords.some((c,i)=>i%5===0 && map.distance([c[1],c[0]],h)<250)).length;
+}
+
+/* ---- Routes: road route (OSRM) and walking route in parallel ---- */
+async function getRoute(){
+  say('Finding the best route…');
+  const a=pts.pickup, b=pts.drop, q=`${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
+  const [d,w]=await Promise.allSettled([
+    fetch('https://router.project-osrm.org/route/v1/driving/'+q).then(r=>r.json()),
+    fetch('https://routing.openstreetmap.de/routed-foot/route/v1/foot/'+q).then(r=>r.json())]);
+  const rt=d.value && d.value.code==='Ok' && d.value.routes[0];
+  if(!rt) return say(d.status==='rejected' ? 'Could not reach the routing service. Check your connection and try again.' : 'No road route found between those two places.');
+  route={km:rt.distance/1000, min:rt.duration/60, geo:rt.geometry};
+  const wt=w.value && w.value.code==='Ok' && w.value.routes[0];
+  walk=wt ? {km:wt.distance/1000, geo:wt.geometry} : {km:route.km, geo:rt.geometry};
+  hotBoost=Math.min(.2,hotspots(rt.geometry.coordinates)*.07);
+  updateTraffic();
+  draw('drive',true);
+  say(`${fmtDist(route.km)} by road. ${level().n} traffic right now. Choose a ride or walk.`);
+  renderOptions();
+}
+
+function draw(kind,fit){
+  if(routeLayer) map.removeLayer(routeLayer);
+  const isWalk=kind==='walk';
+  routeLayer=L.geoJSON(isWalk?walk.geo:route.geo,{style:{color:isWalk?(document.documentElement.dataset.theme==='dark'?'#E8F0F2':'#13222B'):level().c,weight:6,opacity:.9,dashArray:isWalk?'2 10':null,lineCap:'round'}}).addTo(map);
+  if(!fit) return;
+  const mobile=matchMedia('(max-width:767px)').matches;
+  map.fitBounds(routeLayer.getBounds(),{paddingTopLeft:[30,30],paddingBottomRight:[30, mobile ? $('.sheet').offsetHeight+20 : 30]});
+}
+
+/* ---- Options: fare and ETA change live with traffic ---- */
+function quote(key,m){
+  const walking=key==='walk';
+  const mins=walking ? walk.km*settings.walk : route.min*(1+traffic*.9*TF[key])*m.slow;
+  const fare=walking ? 0 : Math.round(m.base+Math.max(0,route.km-(m.freeKm||0))*m.perKm+(m.perMin||0)*mins);
+  return {fare, eta:Math.round(mins+(key==='taxi'?taxiWait():(m.wait||0))), km:walking?walk.km:route.km};
+}
+
+function renderOptions(){
+  const box=$('#options'); box.innerHTML='';
+  let chosen=null;
+  [...Object.entries(FARES),['walk',WALK]].forEach(([key,m])=>{
+    if(m.maxKm && route.km>m.maxKm) return;
+    const q=quote(key,m), walking=key==='walk', on=!!selected && selected.key===key, b=document.createElement('button');
+    const arrive=clock(new Date(Date.now()+q.eta*60000));
+    const t=key==='jeep' ? matchRoute() : null; let note=(m.note||'').toLowerCase();
+    if(key==='jeep') note=t ? `take ${t.r.name} from ${t.a.s[0]} to ${t.b.s[0]}, walk ${fmtDist((t.a.w+t.b.w)/1000)} in total, next jeepney ${nextEta(t.r,t.a.s)}` : 'no route nearby, estimate from road distance';
+    b.className='opt'; b.setAttribute('aria-pressed',String(on)); b.style.setProperty('--c',t?t.r.color:m.color);
+    b.innerHTML=`<span class="ico" aria-hidden="true">${m.ico}</span><span class="name">${m.label}</span><span class="fare">${walking?fmtDist(q.km):'₱'+q.fare}</span><span class="sub">About ${q.eta} min, arrive ${arrive}${note?', '+note:''}</span>`;
+    b.onclick=()=>{ selected={key}; renderOptions(); draw(walking?'walk':'drive',true); $('.opt[aria-pressed="true"]').focus(); };
+    box.append(b);
+    if(on) chosen={key,m,q};
+  });
+  const c=$('#confirm');
+  c.hidden=!chosen || chosen.key==='walk';
+  if(chosen) c.textContent=`Book ${chosen.m.label} for ₱${chosen.q.fare}`;
+}
+
+$('#confirm').onclick=()=>{
+  if(!selected) return;
+  say(`${FARES[selected.key].label} requested (demo). Driver matching comes in the next step.`);
+};
+
+/* ---- Quick picks and the live loop ---- */
+SPOTS.forEach(([n,la,ln])=>{
+  const b=document.createElement('button'); b.type='button'; b.textContent=n;
+  b.onclick=()=>setPoint(pts.pickup?'drop':'pickup',{lat:la,lng:ln},n);
+  $('#chips').append(b);
+});
+function tick(){
+  updateTraffic();
+  if(!route) return;
+  draw(selected && selected.key==='walk' ? 'walk' : 'drive', false);
+  renderOptions();
+}
+updateTraffic();
+setInterval(tick,8000);
+
+/* ---- Simulated Baguio jeepney routes (sample data, stop positions are approximate) ---- */
+// Each route: name, color, ordered stops [name, lat, lng]. Add or edit routes here.
+const JEEPS=[
+  {id:'mv',name:'Mines View – Session',color:'#1D7AFC',stops:[['Mines View Park',16.4195,120.6275],['Wright Park',16.4172,120.6110],['Upper Session Road',16.4135,120.5985],['Session Road',16.4122,120.5962],['Public Market',16.4158,120.5937]]},
+  {id:'jh',name:'Camp John Hay – Burnham',color:'#8E44AD',stops:[['Camp John Hay',16.3996,120.6128],['Pacdal Circle',16.4025,120.6075],['SM City Baguio',16.4088,120.5978],['Burnham Park',16.4113,120.5935],['Public Market',16.4158,120.5937]]},
+  {id:'ir',name:'Irisan – Public Market',color:'#00A3A3',stops:[['Irisan Terminal',16.4140,120.5640],['Dominican Hill',16.4165,120.5835],['Aurora Hill',16.4170,120.5900],['Public Market',16.4158,120.5937]]},
+  {id:'tr',name:'Trancoville – Session',color:'#D6336C',stops:[['Trancoville',16.4290,120.5940],['Magsaysay Avenue',16.4185,120.5940],['Public Market',16.4158,120.5937],['Session Road',16.4122,120.5962]]}
+];
+const jeepGroups={}; let focusId=null;
+
+JEEPS.forEach(async r=>{
+  const g=L.layerGroup().addTo(map); jeepGroups[r.id]=g;
+  let latlngs=r.stops.map(s=>[s[1],s[2]]);   // fallback: straight lines between stops
+  try{   // follow the real roads between the stops
+    const d=await (await fetch('https://router.project-osrm.org/route/v1/driving/'+r.stops.map(s=>s[2]+','+s[1]).join(';')+'?overview=full&geometries=geojson')).json();
+    if(d.code==='Ok') latlngs=d.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+  }catch(e){}
+  L.polyline(latlngs,{color:r.color,weight:5,opacity:.85,lineCap:'round'}).addTo(g).bringToBack();
+  buildPath(r,latlngs); spawnJeeps(r);
+  r.stops.forEach(s=>L.circleMarker([s[1],s[2]],{radius:6,color:'#fff',weight:2,fillColor:r.color,fillOpacity:1}).bindPopup(`<b>${s[0]}</b><br>${r.name}`).addTo(g));
+});
+
+JEEPS.forEach(r=>{
+  const b=document.createElement('button');
+  b.type='button'; b.className='rt'; b.setAttribute('aria-pressed','false'); b.style.setProperty('--c',r.color);
+  b.innerHTML=`<i></i>${r.name}`;
+  b.onclick=()=>focusRoute(focusId===r.id ? null : r.id);
+  r.btn=b; $('#routes').append(b);
+});
+
+function focusRoute(id){   // show one route and its stop list, or all routes again
+  focusId=id;
+  JEEPS.forEach(r=>{
+    r.btn.setAttribute('aria-pressed',String(r.id===id));
+    const g=jeepGroups[r.id], show=!id || r.id===id;
+    if(show && !map.hasLayer(g)) g.addTo(map);
+    if(!show && map.hasLayer(g)) map.removeLayer(g);
+  });
+  const list=$('#stops'); list.hidden=!id;
+  if(!id) return;
+  const r=JEEPS.find(x=>x.id===id), mobile=matchMedia('(max-width:767px)').matches;
+  list.style.setProperty('--c',r.color);
+  list.innerHTML=r.stops.map(s=>`<li>${s[0]}</li>`).join('');
+  map.fitBounds(L.latLngBounds(r.stops.map(s=>[s[1],s[2]])),{paddingTopLeft:[30,30],paddingBottomRight:[30, mobile ? $('.sheet').offsetHeight+20 : 30]});
+}
+
+/* Nearest route whose stops are both within 700 m of pickup and drop-off (straight-line distance) */
+function matchRoute(){
+  let best=null;
+  JEEPS.forEach(r=>{
+    const near=p=>r.stops.map(s=>({s,w:map.distance([s[1],s[2]],[p.lat,p.lng])})).sort((x,y)=>x.w-y.w)[0];
+    const a=near(pts.pickup), b=near(pts.drop);
+    if(a.w<700 && b.w<700 && a.s!==b.s && (!best || a.w+b.w<best.a.w+best.b.w)) best={r,a,b};
+  });
+  return best;
+}
+
+/* ---- Menu tabs ---- */
+const TABBTNS=[...document.querySelectorAll('.tab')];
+function showTab(id){
+  TABBTNS.forEach(t=>t.setAttribute('aria-selected',String(t.dataset.t===id)));
+  document.querySelectorAll('.panel').forEach(p=>p.hidden=p.id!=='p-'+id);
+}
+TABBTNS.forEach(t=>t.onclick=()=>showTab(t.dataset.t));
+const pad=()=>({paddingTopLeft:[30,30],paddingBottomRight:[30, matchMedia('(max-width:767px)').matches ? $('.sheet').offsetHeight+20 : 30]});
+const offset=(p,north,east)=>L.latLng(p.lat+north/111320, p.lng+east/(111320*Math.cos(p.lat*Math.PI/180)));
+const vehIcon=(txt,bg,fg='#fff')=>L.divIcon({className:'',html:`<div class="veh" style="background:${bg};color:${fg}">${txt}</div>`,iconSize:[22,22],iconAnchor:[11,11]});
+const jeepGroup=L.layerGroup().addTo(map), taxiGroup=L.layerGroup().addTo(map), busGroup=L.layerGroup().addTo(map);
+const mpm=()=>250*(1-.5*traffic);   // real jeepney speed in meters per minute (about 15 km/h, slower in traffic)
+
+/* ---- Simulated jeepneys: 3 per route, moving back and forth along the road ---- */
+let jeeps=[];
+function buildPath(r,latlngs){
+  r.path=latlngs.map(p=>L.latLng(p)); r.cum=[0];
+  for(let i=1;i<r.path.length;i++) r.cum.push(r.cum[i-1]+map.distance(r.path[i-1],r.path[i]));
+  r.len=r.cum[r.cum.length-1];
+  r.stops.forEach(s=>{ let b=0,bd=1e12; r.path.forEach((q,i)=>{const d=map.distance(q,[s[1],s[2]]); if(d<bd){bd=d;b=i;}}); s.d=r.cum[b]; });
+}
+function pointAt(r,d){
+  let i=1; while(i<r.cum.length-1 && r.cum[i]<d) i++;
+  const f=(d-r.cum[i-1])/((r.cum[i]-r.cum[i-1])||1), a=r.path[i-1], b=r.path[i];
+  return L.latLng(a.lat+(b.lat-a.lat)*f, a.lng+(b.lng-a.lng)*f);
+}
+function spawnJeeps(r){
+  for(let i=0;i<3;i++){
+    const v={r,d:r.len*(i+.5)/3,dir:i%2?-1:1};
+    v.mk=L.marker(pointAt(r,v.d),{icon:vehIcon('J',r.color),keyboard:false,interactive:false}).addTo(jeepGroup);
+    jeeps.push(v);
+  }
+}
+function stepJeeps(dt){
+  jeeps.forEach(v=>{
+    v.d+=v.dir*mpm()/60*dt*settings.sim;
+    if(v.d>v.r.len){v.d=v.r.len;v.dir=-1;}
+    if(v.d<0){v.d=0;v.dir=1;}
+    v.mk.setLatLng(pointAt(v.r,v.d)); v.mk.setOpacity(!focusId||v.r.id===focusId?1:0);
+  });
+}
+function nextEta(r,s){   // minutes until the nearest jeepney of this route reaches the stop
+  let best=Infinity;
+  jeeps.filter(v=>v.r===r).forEach(v=>{
+    let d=v.dir>0 ? s.d-v.d : v.d-s.d;
+    if(d<0) d=v.dir>0 ? (r.len-v.d)+(r.len-s.d) : v.d+s.d;
+    best=Math.min(best,d);
+  });
+  return best===Infinity ? 'soon' : 'in '+Math.max(1,Math.round(best/mpm()))+' min';
+}
+
+/* ---- Simulated taxis wandering around the pickup (or the city center) ---- */
+let taxis=[], taxiC=L.latLng(16.4023,120.5960);
+function spawnTaxis(c){
+  taxiGroup.clearLayers(); taxis=[]; taxiC=L.latLng(c);
+  for(let i=0;i<6;i++){
+    const a=Math.random()*6.283, r=100+Math.random()*350, p=offset(taxiC,r*Math.cos(a),r*Math.sin(a));
+    taxis.push({p,h:Math.random()*6.283,mk:L.marker(p,{icon:vehIcon('T','#FFC20E','#13222B'),keyboard:false,interactive:false}).addTo(taxiGroup)});
+  }
+}
+function moveTaxis(dt){
+  taxis.forEach(t=>{
+    t.h+=(Math.random()-.5)*.8;
+    if(map.distance(t.p,taxiC)>450) t.h=Math.atan2(taxiC.lng-t.p.lng,taxiC.lat-t.p.lat);
+    const m=4*settings.sim*dt*(1-.5*traffic);   // about 4 m/s
+    t.p=offset(t.p,m*Math.cos(t.h),m*Math.sin(t.h)); t.mk.setLatLng(t.p);
+  });
+}
+function taxiWait(){   // minutes for the nearest taxi to reach the pickup
+  if(!taxis.length) return 3;
+  const c=pts.pickup||taxiC, d=Math.min(...taxis.map(t=>map.distance(t.p,c)));
+  return Math.max(1,Math.round(d/(330*(1-.4*traffic))));
+}
+const _setPoint=setPoint;
+setPoint=(k,l,t)=>{ _setPoint(k,l,t); if(k==='pickup') spawnTaxis(l); };
+$('#taxi-me').onclick=()=>$('#loc').click();
+
+/* ---- Provincial bus routes from Baguio (sample data, terminal positions are approximate) ---- */
+const BUSES=[
+  {id:'lu',name:'Baguio – San Fernando (La Union)',color:'#F77F00',stops:[['Baguio–La Union Terminal',16.4150,120.5925],['San Fernando Terminal, La Union',16.6159,120.3190]]},
+  {id:'sg',name:'Baguio – Sagada (Mountain Province)',color:'#7F5539',stops:[['Baguio Dangwa Terminal',16.4175,120.5930],['Sagada Terminal',17.0845,120.9015]]},
+  {id:'bt',name:'Baguio – Bontoc (Mountain Province)',color:'#3A0CA3',stops:[['Baguio Dangwa Terminal',16.4175,120.5930],['Bontoc Terminal',17.0915,120.9760]]},
+  {id:'dg',name:'Baguio – Dagupan (Pangasinan)',color:'#6B705C',stops:[['Baguio Victory Liner Terminal',16.4095,120.5915],['Dagupan Terminal',16.0433,120.3333]]},
+  {id:'vg',name:'Baguio – Vigan (Ilocos Sur)',color:'#2B2D42',stops:[['Baguio Partas Terminal',16.4140,120.5930],['San Fernando Terminal, La Union',16.6159,120.3190],['Vigan Terminal',17.5747,120.3869]]},
+  {id:'mn',name:'Baguio – Manila (Cubao)',color:'#0B7285',stops:[['Baguio Victory Liner Terminal',16.4095,120.5915],['Cubao Terminal, Quezon City',14.6200,121.0520]]}
+];
+const TERM={};   // terminals = every stop of a bus route, merged by name
+BUSES.forEach(r=>r.stops.forEach(s=>{ (TERM[s[0]]=TERM[s[0]]||{lat:s[1],lng:s[2],routes:[]}).routes.push(r.name); }));
+Object.entries(TERM).forEach(([name,t])=>{
+  t.mk=L.marker([t.lat,t.lng],{icon:L.divIcon({className:'',html:'<div class="term">🚌</div>',iconSize:[26,26],iconAnchor:[13,13]})}).bindPopup(`<b>${name}</b><br>${t.routes.join('<br>')}`).addTo(busGroup);
+  const li=document.createElement('li'), b=document.createElement('button');
+  b.type='button'; b.textContent=name; b.onclick=()=>{ map.flyTo([t.lat,t.lng],13); t.mk.openPopup(); };
+  li.append(b); $('#terms').append(li);
+});
+BUSES.forEach(async (r,i)=>{
+  r.btn=document.createElement('button');
+  r.btn.type='button'; r.btn.className='rt'; r.btn.setAttribute('aria-pressed','false'); r.btn.style.setProperty('--c',r.color);
+  r.btn.innerHTML=`<i></i>${r.name}`; r.btn.onclick=()=>focusBus(r.id); $('#busroutes').append(r.btn);
+  let latlngs=r.stops.map(s=>[s[1],s[2]]);
+  await new Promise(z=>setTimeout(z,600+i*500));   // stagger requests to the free routing server
+  try{
+    const d=await (await fetch('https://router.project-osrm.org/route/v1/driving/'+r.stops.map(s=>s[2]+','+s[1]).join(';')+'?overview=simplified&geometries=geojson')).json();
+    if(d.code==='Ok'){ latlngs=d.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]); r.km=d.routes[0].distance/1000; r.min=d.routes[0].duration/60; }
+  }catch(e){}
+  r.line=L.polyline(latlngs,{color:r.color,weight:4,opacity:.75,dashArray:'10 8'}).addTo(busGroup).bringToBack();
+});
+function focusBus(id){
+  BUSES.forEach(r=>r.btn.setAttribute('aria-pressed',String(r.id===id)));
+  const r=BUSES.find(x=>x.id===id);
+  const h=r.min/60, b=FARES.bus;
+  $('#bus-info').textContent = r.km
+    ? `${r.name}: about ${Math.round(r.km)} km by road, ${Math.floor(h)} h ${Math.round((h%1)*60)} min. Sample fare ₱${Math.round(b.base+Math.max(0,r.km-b.freeKm)*b.perKm)}.`
+    : `${r.name}: road distance is not available yet. Try again in a moment.`;
+  map.fitBounds(r.line ? r.line.getBounds() : L.latLngBounds(r.stops.map(s=>[s[1],s[2]])), pad());
+}
+
+/* ---- Settings ---- */
+const bind=(sel,fn)=>$(sel).addEventListener('change',e=>fn(e.target));
+const toggle=(g,on)=>map[on?'addLayer':'removeLayer'](g);
+bind('#s-jeeps',el=>{settings.jeeps=el.checked; toggle(jeepGroup,el.checked);});
+bind('#s-taxis',el=>{settings.taxis=el.checked; toggle(taxiGroup,el.checked);});
+bind('#s-terms',el=>{settings.terms=el.checked; toggle(busGroup,el.checked);});
+bind('#s-traffic',el=>{settings.traffic=el.value; tick();});
+bind('#s-walk',el=>{settings.walk=+el.value; if(route) renderOptions();});
+bind('#s-sim',el=>{settings.sim=+el.value;});
+
+/* ---- Movement loop ---- */
+function refreshInfo(){
+  $('#taxi-info').textContent = settings.taxis
+    ? `${taxis.length} taxis near ${pts.pickup?'your pickup':'the city center'}. The nearest is about ${taxiWait()} min away.`
+    : 'Nearby taxis are switched off in Settings.';
+  if(focusId){
+    const r=JEEPS.find(x=>x.id===focusId);
+    [...$('#stops').children].forEach((li,i)=>{ li.textContent=`${r.stops[i][0]}, next jeepney ${nextEta(r,r.stops[i])}`; });
+  }
+}
+let last=Date.now(), n=0;
+setInterval(()=>{
+  const now=Date.now(), dt=(now-last)/1000; last=now;
+  stepJeeps(dt); moveTaxis(dt);
+  if(++n%4===0) refreshInfo();
+},700);
+spawnTaxis([16.4023,120.5960]); refreshInfo();
+
+/* ---- Theme: light, dark, or follow the device ---- */
+const darkQuery=matchMedia('(prefers-color-scheme: dark)');
+let themeMode='system';
+try{ themeMode=localStorage.getItem('byahe-theme')||'system'; }catch(e){}
+function applyTheme(){
+  const dark=themeMode==='dark' || (themeMode==='system' && darkQuery.matches);
+  document.documentElement.dataset.theme=dark?'dark':'light';
+  document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-checked',String(b.dataset.m===themeMode)));
+  if(route) draw(selected && selected.key==='walk' ? 'walk' : 'drive', false);   // recolor the trip line
+}
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{
+  themeMode=b.dataset.m;
+  try{ localStorage.setItem('byahe-theme',themeMode); }catch(e){}
+  applyTheme();
+});
+darkQuery.addEventListener('change',()=>{ if(themeMode==='system') applyTheme(); });
+applyTheme();
+</script>
+</body>
+</html>
