@@ -13,7 +13,7 @@
 :root{
   --road:#0F3D4C; --signal:#FFC20E; --paper:#F7F9F8; --ink:#13222B;
   --coral:#E4572E; --mist:#DCE5E3; --muted:#5B6B72;
-  --card:#fff; --on-road:#fff; color-scheme:light;
+  --card:rgba(255,255,255,.6); --solid:#fff; --glass:rgba(247,249,248,.72); --glass-line:rgba(255,255,255,.75); --on-road:#fff; color-scheme:light;
   font-family:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
 *{box-sizing:border-box}
@@ -27,19 +27,22 @@ button,input{font:inherit;color:inherit}
 /* Phone: bottom sheet over the map */
 .sheet{
   position:absolute;left:0;right:0;bottom:0;z-index:1000;
-  max-height:58dvh;overflow:auto;background:var(--paper);
+  max-height:58dvh;overflow:auto;background:var(--glass);-webkit-backdrop-filter:blur(22px) saturate(170%);backdrop-filter:blur(22px) saturate(170%);border:1px solid var(--glass-line);border-bottom:0;transition:transform .38s cubic-bezier(.2,.8,.2,1);
   border-radius:20px 20px 0 0;box-shadow:0 -6px 24px rgba(15,61,76,.22);
   padding:10px 16px calc(16px + env(safe-area-inset-bottom));
 }
 .grab{width:42px;height:4px;border-radius:2px;background:var(--mist);margin:0 auto 10px}
 h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.7rem;margin:0 0 10px;color:var(--road);letter-spacing:-.02em}
 
-/* Tablet and up: side panel */
+/* Collapsed: the panel slides away to show the full map */
+.sheet.collapsed{transform:translateY(calc(100% + 12px));box-shadow:none}
+
+/* Tablet and up: floating glass panel on the left */
 @media (min-width:768px){
-  .app{display:grid;grid-template-columns:clamp(340px,38vw,420px) 1fr}
-  .sheet{position:relative;grid-column:1;grid-row:1;max-height:none;border-radius:0;box-shadow:4px 0 18px rgba(15,61,76,.15);padding:20px 20px 24px;z-index:2}
+  .app{--sheet-w:clamp(340px,38vw,420px)}
+  .sheet{top:12px;left:12px;right:auto;bottom:12px;width:var(--sheet-w);max-height:none;border:1px solid var(--glass-line);border-radius:22px;padding:20px 20px 24px;box-shadow:0 10px 40px rgba(15,61,76,.28)}
+  .sheet.collapsed{transform:translateX(calc(-100% - 24px))}
   .grab{display:none}
-  #map{position:relative;grid-column:2;grid-row:1}
   h1{font-size:2.1rem}
 }
 
@@ -109,7 +112,7 @@ h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.7rem
 :root[data-theme="dark"]{
   color-scheme:dark;
   --paper:#0F1A20; --ink:#E8F0F2; --mist:#2A3A42; --muted:#9FB1B8;
-  --card:#17252C; --road:#5CB8D6; --on-road:#0B1A21; --coral:#FF7A59;
+  --card:rgba(255,255,255,.07); --solid:#17252C; --glass:rgba(15,26,32,.66); --glass-line:rgba(255,255,255,.14); --road:#5CB8D6; --on-road:#0B1A21; --coral:#FF7A59;
 }
 .row select{color:var(--ink)}
 .seg{display:flex;border:1.5px solid var(--mist);border-radius:10px;overflow:hidden}
@@ -119,8 +122,25 @@ h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.7rem
 [data-theme="dark"] .leaflet-container{background:#0F1A20}
 [data-theme="dark"] .leaflet-control-attribution{background:rgba(15,26,32,.8);color:var(--muted)}
 [data-theme="dark"] .leaflet-control-attribution a{color:var(--road)}
-.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--card);color:var(--ink)}
-.leaflet-bar a,.leaflet-bar a:hover{background:var(--card);color:var(--ink);border-bottom-color:var(--mist)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--solid);color:var(--ink)}
+.leaflet-bar a,.leaflet-bar a:hover{background:var(--solid);color:var(--ink);border-bottom-color:var(--mist)}
+
+/* Panel arrow */
+.panel-toggle{position:absolute;z-index:1001;left:50%;margin-left:-21px;bottom:calc(var(--sheet-h,40dvh) + 10px);width:42px;height:42px;padding:0;display:grid;place-items:center;border-radius:50%;cursor:pointer;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);-webkit-backdrop-filter:blur(14px) saturate(170%);backdrop-filter:blur(14px) saturate(170%);box-shadow:0 4px 14px rgba(0,0,0,.25);transition:bottom .38s cubic-bezier(.2,.8,.2,1),left .38s cubic-bezier(.2,.8,.2,1)}
+.panel-toggle svg{width:20px;height:20px;transition:transform .38s cubic-bezier(.2,.8,.2,1)}
+.app.collapsed .panel-toggle{bottom:calc(14px + env(safe-area-inset-bottom))}
+.app.collapsed .panel-toggle svg{transform:rotate(180deg)}
+@media (min-width:768px){
+  .panel-toggle{top:50%;bottom:auto;margin:-21px 0 0;left:calc(var(--sheet-w) + 22px)}
+  .panel-toggle svg{transform:rotate(90deg)}
+  .app.collapsed .panel-toggle{bottom:auto;left:14px}
+  .app.collapsed .panel-toggle svg{transform:rotate(-90deg)}
+}
+/* Smooth light/dark fade (class is added for half a second while switching) */
+.leaflet-tile-pane{transition:filter .6s ease}
+.leaflet-marker-icon{transition:opacity .5s ease}
+.theming,.theming *,.theming *::before,.theming *::after{transition:background-color .45s ease,color .45s ease,border-color .45s ease,fill .45s ease,stroke .45s ease,box-shadow .45s ease,filter .6s ease !important}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms !important;animation-duration:.01ms !important}}
 
 /* Map pins */
 .pin{width:18px;height:18px;border:3px solid #fff;background:var(--road);border-radius:50%;box-shadow:0 1px 5px rgba(0,0,0,.45)}
@@ -131,9 +151,9 @@ h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.7rem
 <main class="app">
   <div id="map" role="application" aria-label="Map of Baguio City"></div>
 
-  <section class="sheet" aria-label="Plan your trip">
+  <section class="sheet" id="sheet" aria-label="Plan your trip">
     <div class="grab" aria-hidden="true"></div>
-    <div class="top"><h1>Go Map</h1><p class="traffic"><span class="tdot" id="tdot"></span><span id="ttext">Loading traffic…</span></p></div>
+    <div class="top"><h1>Byahe</h1><p class="traffic"><span class="tdot" id="tdot"></span><span id="ttext">Loading traffic…</span></p></div>
 
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" data-t="trip" aria-selected="true">Trip</button>
@@ -195,12 +215,15 @@ h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.7rem
       </div>
       <label class="row"><span>Show moving jeepneys</span><input type="checkbox" id="s-jeeps" checked></label>
       <label class="row"><span>Show nearby taxis</span><input type="checkbox" id="s-taxis" checked></label>
+      <label class="row"><span>Taxi radar range</span><select id="s-radar"><option value="150">150 m</option><option value="300" selected>300 m</option><option value="500">500 m</option></select></label>
       <label class="row"><span>Show bus routes and terminals</span><input type="checkbox" id="s-terms" checked></label>
       <label class="row"><span>Traffic</span><select id="s-traffic"><option value="auto">Automatic (simulated)</option><option value="light">Light</option><option value="moderate">Moderate</option><option value="heavy">Heavy</option></select></label>
       <label class="row"><span>Walking pace</span><select id="s-walk"><option value="15">Normal (hilly)</option><option value="12">Fast</option><option value="20">Slow</option></select></label>
       <label class="row"><span>Vehicle speed on the map</span><select id="s-sim"><option value="1">Real time</option><option value="4" selected>4x, easier to watch</option><option value="10">10x</option></select></label>
     </div>
   </section>
+
+  <button class="panel-toggle" id="panel-toggle" type="button" aria-controls="sheet" aria-expanded="true" aria-label="Hide panel, show full map"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 8l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -218,9 +241,12 @@ const FARES = {
 };
 
 const $ = s => document.querySelector(s);
-const map = L.map('map',{zoomControl:true,minZoom:8,maxBounds:[[14.3,119.8],[18.7,121.7]],maxBoundsViscosity:1}).setView([16.4023,120.5960],14);   // Baguio City
+const map = L.map('map',{zoomControl:false,attributionControl:false,minZoom:8,maxBounds:[[14.3,119.8],[18.7,121.7]],maxBoundsViscosity:1}).setView([16.4023,120.5960],14);   // Baguio City
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 
+const wide=matchMedia('(min-width:768px)').matches;   // controls move so the panel never covers them
+L.control.zoom({position:wide?'bottomright':'topright'}).addTo(map);
+L.control.attribution({prefix:false,position:wide?'bottomright':'topleft'}).addTo(map);
 const pts = {pickup:null, drop:null}, markers = {};
 let routeLayer = null, route = null, selected = null;
 const say = t => { $('#status').textContent = t; };
@@ -278,7 +304,7 @@ $('#loc').onclick = () => {
 /* Tap the map: first tap sets pickup, later taps set drop-off */
 map.on('click', e => setPoint(pts.pickup ? 'drop' : 'pickup', e.latlng, 'Pinned location'));
 
-const settings={jeeps:true,taxis:true,terms:true,traffic:'auto',walk:15,sim:4};
+const settings={jeeps:true,taxis:true,terms:true,traffic:'auto',walk:15,sim:4,radar:300};
 /* ---- Simulated live traffic for Baguio (no real traffic feed, this is a simulation) ---- */
 const LEVELS=[{max:.35,n:'Light',c:'#2E9E5B'},{max:.65,n:'Moderate',c:'#E0A100'},{max:1.01,n:'Heavy',c:'#D43F2F'}];
 const TF={taxi:1,car:1,moto:.6,trike:.8,jeep:1.1,bus:1.2};   // how much traffic slows each ride
@@ -325,6 +351,7 @@ async function getRoute(){
   walk=wt ? {km:wt.distance/1000, geo:wt.geometry} : {km:route.km, geo:rt.geometry};
   hotBoost=Math.min(.2,hotspots(rt.geometry.coordinates)*.07);
   updateTraffic();
+  setPanel(true);
   draw('drive',true);
   say(`${fmtDist(route.km)} by road. ${level().n} traffic right now. Choose a ride or walk.`);
   renderOptions();
@@ -336,7 +363,7 @@ function draw(kind,fit){
   routeLayer=L.geoJSON(isWalk?walk.geo:route.geo,{style:{color:isWalk?(document.documentElement.dataset.theme==='dark'?'#E8F0F2':'#13222B'):level().c,weight:6,opacity:.9,dashArray:isWalk?'2 10':null,lineCap:'round'}}).addTo(map);
   if(!fit) return;
   const mobile=matchMedia('(max-width:767px)').matches;
-  map.fitBounds(routeLayer.getBounds(),{paddingTopLeft:[30,30],paddingBottomRight:[30, mobile ? $('.sheet').offsetHeight+20 : 30]});
+  map.fitBounds(routeLayer.getBounds(),pad());
 }
 
 /* ---- Options: fare and ETA change live with traffic ---- */
@@ -430,7 +457,7 @@ function focusRoute(id){   // show one route and its stop list, or all routes ag
   const r=JEEPS.find(x=>x.id===id), mobile=matchMedia('(max-width:767px)').matches;
   list.style.setProperty('--c',r.color);
   list.innerHTML=r.stops.map(s=>`<li>${s[0]}</li>`).join('');
-  map.fitBounds(L.latLngBounds(r.stops.map(s=>[s[1],s[2]])),{paddingTopLeft:[30,30],paddingBottomRight:[30, mobile ? $('.sheet').offsetHeight+20 : 30]});
+  map.fitBounds(L.latLngBounds(r.stops.map(s=>[s[1],s[2]])),pad());
 }
 
 /* Nearest route whose stops are both within 700 m of pickup and drop-off (straight-line distance) */
@@ -451,7 +478,10 @@ function showTab(id){
   document.querySelectorAll('.panel').forEach(p=>p.hidden=p.id!=='p-'+id);
 }
 TABBTNS.forEach(t=>t.onclick=()=>showTab(t.dataset.t));
-const pad=()=>({paddingTopLeft:[30,30],paddingBottomRight:[30, matchMedia('(max-width:767px)').matches ? $('.sheet').offsetHeight+20 : 30]});
+const pad=()=>{   // keep the route clear of the panel, unless the panel is hidden
+  const sh=$('.sheet'), open=!sh.classList.contains('collapsed'), mobile=matchMedia('(max-width:767px)').matches;
+  return {paddingTopLeft:[(!mobile&&open)?sh.offsetWidth+36:30,30],paddingBottomRight:[30,(mobile&&open)?sh.offsetHeight+20:30]};
+};
 const offset=(p,north,east)=>L.latLng(p.lat+north/111320, p.lng+east/(111320*Math.cos(p.lat*Math.PI/180)));
 const vehIcon=(txt,bg,fg='#fff')=>L.divIcon({className:'',html:`<div class="veh" style="background:${bg};color:${fg}">${txt}</div>`,iconSize:[22,22],iconAnchor:[11,11]});
 const jeepGroup=L.layerGroup().addTo(map), taxiGroup=L.layerGroup().addTo(map), busGroup=L.layerGroup().addTo(map);
@@ -495,28 +525,56 @@ function nextEta(r,s){   // minutes until the nearest jeepney of this route reac
   return best===Infinity ? 'soon' : 'in '+Math.max(1,Math.round(best/mpm()))+' min';
 }
 
-/* ---- Simulated taxis wandering around the pickup (or the city center) ---- */
-let taxis=[], taxiC=L.latLng(16.4023,120.5960);
-function spawnTaxis(c){
+/* ---- Taxi radar: a circle around the pickup. Taxis drive in along real roads, cross it and fade out ---- */
+let taxis=[], taxiC=null, ring=null, radarToken=0;
+const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+async function spawnTaxis(c){
+  const token=++radarToken, R=settings.radar;
   taxiGroup.clearLayers(); taxis=[]; taxiC=L.latLng(c);
-  for(let i=0;i<6;i++){
-    const a=Math.random()*6.283, r=100+Math.random()*350, p=offset(taxiC,r*Math.cos(a),r*Math.sin(a));
-    taxis.push({p,h:Math.random()*6.283,mk:L.marker(p,{icon:vehIcon('T','#FFC20E','#13222B'),keyboard:false,interactive:false}).addTo(taxiGroup)});
+  L.circle(taxiC,{radius:R,color:'#5CB8D6',weight:1.5,fillColor:'#5CB8D6',fillOpacity:.08,interactive:false}).addTo(taxiGroup);
+  ring=L.circle(taxiC,{radius:1,color:'#5CB8D6',weight:2,fill:false,opacity:0,interactive:false}).addTo(taxiGroup);
+  for(let i=0;i<6;i++){   // one road chord per taxi: in on one side, out on the other
+    const a=Math.random()*6.283, b=a+3.1416+(Math.random()-.5)*1.2;
+    const from=offset(taxiC,R*Math.cos(a),R*Math.sin(a)), to=offset(taxiC,R*Math.cos(b),R*Math.sin(b));
+    await new Promise(z=>setTimeout(z,300));   // be gentle with the free routing server
+    if(token!==radarToken) return;
+    try{
+      const d=await (await fetch(`https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`)).json();
+      if(token!==radarToken) return;
+      if(d.code!=='Ok') continue;
+      const t={stops:[],d:0,wait:Math.random()*5,seen:false,vis:false};
+      buildPath(t,d.routes[0].geometry.coordinates.map(q=>[q[1],q[0]]));
+      t.mk=L.marker(t.path[0],{icon:vehIcon('T','#FFC20E','#13222B'),keyboard:false,interactive:false,opacity:0}).addTo(taxiGroup);
+      taxis.push(t);
+    }catch(err){}
   }
 }
 function moveTaxis(dt){
+  if(!taxiC) return;
+  const R=settings.radar;
   taxis.forEach(t=>{
-    t.h+=(Math.random()-.5)*.8;
-    if(map.distance(t.p,taxiC)>450) t.h=Math.atan2(taxiC.lng-t.p.lng,taxiC.lat-t.p.lat);
-    const m=4*settings.sim*dt*(1-.5*traffic);   // about 4 m/s
-    t.p=offset(t.p,m*Math.cos(t.h),m*Math.sin(t.h)); t.mk.setLatLng(t.p);
+    if(t.wait>0){ t.wait-=dt; return; }
+    t.d+=7*settings.sim*(1-.5*traffic)*dt;   // about 7 m/s
+    const p=pointAt(t,Math.min(t.d,t.len)), dist=map.distance(p,taxiC);
+    if(dist<R*.92) t.seen=true;
+    if(t.d>=t.len || (t.seen && dist>R)){   // left the radar: vanish, then re-enter later
+      t.d=0; t.seen=false; t.vis=false; t.wait=1+Math.random()*5; t.mk.setOpacity(0); return;
+    }
+    t.mk.setLatLng(p); t.vis=dist<R;
+    t.mk.setOpacity(clamp((R-dist)/(R*.12),0,1));   // fade at the radar edge
   });
 }
-function taxiWait(){   // minutes for the nearest taxi to reach the pickup
-  if(!taxis.length) return 3;
-  const c=pts.pickup||taxiC, d=Math.min(...taxis.map(t=>map.distance(t.p,c)));
-  return Math.max(1,Math.round(d/(330*(1-.4*traffic))));
+function taxiWait(){   // minutes for the nearest taxi inside the radar to reach the pickup
+  const near=taxis.filter(t=>t.vis).map(t=>map.distance(t.mk.getLatLng(),pts.pickup||taxiC));
+  return near.length ? Math.max(1,Math.round(Math.min(...near)/(330*(1-.4*traffic)))) : 3;
 }
+(function pulse(now){   // radar ping
+  if(ring && taxiC && !reduceMotion && map.hasLayer(taxiGroup)){
+    const f=(now%2600)/2600;
+    ring.setRadius(Math.max(1,settings.radar*f)); ring.setStyle({opacity:.7*(1-f)});
+  }
+  requestAnimationFrame(pulse);
+})(0);
 const _setPoint=setPoint;
 setPoint=(k,l,t)=>{ _setPoint(k,l,t); if(k==='pickup') spawnTaxis(l); };
 $('#taxi-me').onclick=()=>$('#loc').click();
@@ -565,6 +623,7 @@ const bind=(sel,fn)=>$(sel).addEventListener('change',e=>fn(e.target));
 const toggle=(g,on)=>map[on?'addLayer':'removeLayer'](g);
 bind('#s-jeeps',el=>{settings.jeeps=el.checked; toggle(jeepGroup,el.checked);});
 bind('#s-taxis',el=>{settings.taxis=el.checked; toggle(taxiGroup,el.checked);});
+bind('#s-radar',el=>{settings.radar=+el.value; if(taxiC) spawnTaxis(taxiC);});
 bind('#s-terms',el=>{settings.terms=el.checked; toggle(busGroup,el.checked);});
 bind('#s-traffic',el=>{settings.traffic=el.value; tick();});
 bind('#s-walk',el=>{settings.walk=+el.value; if(route) renderOptions();});
@@ -573,7 +632,7 @@ bind('#s-sim',el=>{settings.sim=+el.value;});
 /* ---- Movement loop ---- */
 function refreshInfo(){
   $('#taxi-info').textContent = settings.taxis
-    ? `${taxis.length} taxis near ${pts.pickup?'your pickup':'the city center'}. The nearest is about ${taxiWait()} min away.`
+    ? (taxiC ? `${taxis.filter(t=>t.vis).length} taxis inside the ${settings.radar} m radar. The nearest is about ${taxiWait()} min away.` : 'Set a pickup, or tap Use my location, to see taxis around you.')
     : 'Nearby taxis are switched off in Settings.';
   if(focusId){
     const r=JEEPS.find(x=>x.id===focusId);
@@ -586,13 +645,14 @@ setInterval(()=>{
   stepJeeps(dt); moveTaxis(dt);
   if(++n%4===0) refreshInfo();
 },700);
-spawnTaxis([16.4023,120.5960]); refreshInfo();
+refreshInfo();
 
 /* ---- Theme: light, dark, or follow the device ---- */
 const darkQuery=matchMedia('(prefers-color-scheme: dark)');
 let themeMode='system';
 try{ themeMode=localStorage.getItem('byahe-theme')||'system'; }catch(e){}
-function applyTheme(){
+function applyTheme(animate){
+  if(animate){ const root=document.documentElement; root.classList.add('theming'); clearTimeout(applyTheme.t); applyTheme.t=setTimeout(()=>root.classList.remove('theming'),600); }
   const dark=themeMode==='dark' || (themeMode==='system' && darkQuery.matches);
   document.documentElement.dataset.theme=dark?'dark':'light';
   document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-checked',String(b.dataset.m===themeMode)));
@@ -601,10 +661,21 @@ function applyTheme(){
 document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{
   themeMode=b.dataset.m;
   try{ localStorage.setItem('byahe-theme',themeMode); }catch(e){}
-  applyTheme();
+  applyTheme(true);
 });
-darkQuery.addEventListener('change',()=>{ if(themeMode==='system') applyTheme(); });
+darkQuery.addEventListener('change',()=>{ if(themeMode==='system') applyTheme(true); });
 applyTheme();
+
+/* ---- Slide the panel away to see the full map ---- */
+const sheet=$('#sheet'), appEl=$('.app'), toggleBtn=$('#panel-toggle');
+function setPanel(open){
+  sheet.classList.toggle('collapsed',!open); appEl.classList.toggle('collapsed',!open);
+  sheet.inert=!open;   // hidden panel stays out of the tab order
+  toggleBtn.setAttribute('aria-expanded',String(open));
+  toggleBtn.setAttribute('aria-label',open?'Hide panel, show full map':'Show panel');
+}
+toggleBtn.onclick=()=>setPanel(sheet.classList.contains('collapsed'));
+new ResizeObserver(()=>appEl.style.setProperty('--sheet-h',sheet.offsetHeight+'px')).observe(sheet);
 </script>
 </body>
 </html>
